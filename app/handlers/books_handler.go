@@ -1,22 +1,22 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/muhammadsaefulr/simple-book-app/app/models"
-	"github.com/muhammadsaefulr/simple-book-app/app/usecase"
+	Service "github.com/muhammadsaefulr/simple-book-app/app/service"
 )
 
 type BooksHandler struct {
-	BooksUseCase *usecase.BooksUseCase
+	BooksService *Service.BooksService
 }
 
-// bu *usecase.BooksUseCase Untuk mengambil data dari mysql dan menentukan berdasarkan handler nya
-func NewBooksHandler(r *gin.RouterGroup, bu *usecase.BooksUseCase) {
+func NewBooksHandler(r *gin.RouterGroup, bu *Service.BooksService) {
 	handler := &BooksHandler{
-		BooksUseCase: bu,
+		BooksService: bu,
 	}
 
 	r.GET("/books", handler.GetBooks)
@@ -27,14 +27,25 @@ func NewBooksHandler(r *gin.RouterGroup, bu *usecase.BooksUseCase) {
 }
 
 func (bu *BooksHandler) CreateBooksList(c *gin.Context) {
-	var books models.Detail
+	var newBook models.Detail
 
-	if err := c.ShouldBindJSON(&books); err != nil {
+	if err := c.ShouldBindJSON(&newBook); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	if err := bu.BooksUseCase.CreateBooksList(&books); err != nil {
+	existingBook, err := bu.BooksService.GetBookByTitle(newBook.BookTitle)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	if existingBook != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "Buku dengan judul yang sama, sudah ada"})
+		return
+	}
+
+	if err := bu.BooksService.CreateBooksList(&newBook); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -43,7 +54,7 @@ func (bu *BooksHandler) CreateBooksList(c *gin.Context) {
 }
 
 func (bu *BooksHandler) GetBooks(c *gin.Context) {
-	books, err := bu.BooksUseCase.GetBooks()
+	books, err := bu.BooksService.GetBooks()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -54,7 +65,7 @@ func (bu *BooksHandler) GetBooks(c *gin.Context) {
 func (bu *BooksHandler) GetBooksCategory(c *gin.Context) {
 	BookCategory := c.Param("category")
 
-	book, err := bu.BooksUseCase.GetBooksCategory(BookCategory)
+	book, err := bu.BooksService.GetBooksCategory(BookCategory)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Category Not Found"})
 		return
@@ -69,7 +80,7 @@ func (bu *BooksHandler) GetBookByID(c *gin.Context) {
 		return
 	}
 
-	book, err := bu.BooksUseCase.GetBooksByID(uint(id))
+	book, err := bu.BooksService.GetBooksByID(uint(id))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Book not found"})
 		return
@@ -91,7 +102,7 @@ func (bu *BooksHandler) UpdateBooks(c *gin.Context) {
 	}
 	book.ID = uint(id)
 
-	if err := bu.BooksUseCase.UpdateBooks(&book); err != nil {
+	if err := bu.BooksService.UpdateBooks(&book); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -106,14 +117,17 @@ func (bu *BooksHandler) DeleteBook(c *gin.Context) {
 		return
 	}
 
-	book, err := bu.BooksUseCase.GetBooksByID(uint(id))
+	book, err := bu.BooksService.GetBooksByID(uint(id))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Book not found"})
 		return
 	}
 
-	if err := bu.BooksUseCase.DeleteBooks(book); err != nil {
+	if err := bu.BooksService.DeleteBooks(book); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Berhasil Menghapus Buku Dengan Id %d", id)})
+	return
 }
